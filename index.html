@@ -1,0 +1,238 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fresh Cuts | Reset Password</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #F4EBD7;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      width: 100%;
+      max-width: 420px;
+      padding: 32px;
+      border-radius: 14px;
+      text-align: center;
+    }
+    h1 { color: #991919; margin-bottom: 3px; }
+    h2 { color: #30251F; }
+    .subtitle { color: #9A8171; font-size: 11px; }
+    p { color: #766B60; line-height: 1.5; }
+    label {
+      display: block;
+      text-align: left;
+      margin: 16px 0 7px;
+      color: #30251F;
+      font-weight: bold;
+      font-size: 13px;
+    }
+    input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #D8CFC1;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button {
+      width: 100%;
+      background: #991919;
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 24px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:disabled { opacity: 0.5; }
+    #message {
+      font-size: 13px;
+      margin-top: 16px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>FRESH CUTS</h1>
+    <div class="subtitle">PREMIUM MEAT SHOP</div>
+    <h2>Reset Password</h2>
+    <p>Enter your new account password below.</p>
+
+    <p id="message">Checking your recovery link...</p>
+
+    <form id="resetForm" hidden>
+      <label for="password">New Password</label>
+      <input
+        type="password"
+        id="password"
+        autocomplete="new-password"
+        minlength="8"
+        required
+      >
+
+      <label for="confirm">Confirm Password</label>
+      <input
+        type="password"
+        id="confirm"
+        autocomplete="new-password"
+        minlength="8"
+        required
+      >
+
+      <button type="submit" id="submitButton">
+        Update Password
+      </button>
+    </form>
+  </div>
+
+  <script type="module">
+    import { createClient } from
+      'https://esm.sh/@supabase/supabase-js@2';
+
+    // REPLACE THESE WITH YOUR SUPABASE PUBLIC VALUES
+    const SUPABASE_URL =
+      'https://fvaiucibaksevkksmfxv.supabase.co';
+
+    const SUPABASE_KEY =
+      'sb_publishable_uXtrq9ZT8ORc6qCK99iFeQ_WRUXezKy';
+
+    const supabase = createClient(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      }
+    );
+
+    const message = document.getElementById('message');
+    const form = document.getElementById('resetForm');
+    const button = document.getElementById('submitButton');
+
+    function showMessage(text, success = false) {
+      message.textContent = text;
+      message.style.color = success ? '#238636' : '#991919';
+    }
+
+    async function initializeRecovery() {
+      try {
+        const hash = new URLSearchParams(
+          window.location.hash.substring(1)
+        );
+
+        const accessToken = hash.get('access_token');
+        const refreshToken = hash.get('refresh_token');
+        const type = hash.get('type');
+        const linkError = hash.get('error_description');
+
+        // Remove session credentials from the address bar.
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname
+        );
+
+        if (linkError) {
+          throw new Error(linkError);
+        }
+
+        if (
+          !accessToken ||
+          !refreshToken ||
+          type !== 'recovery'
+        ) {
+          throw new Error(
+            'Invalid recovery link. Request a new password reset email.'
+          );
+        }
+
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (error) throw error;
+
+        const { data, error: userError } =
+          await supabase.auth.getUser();
+
+        if (userError || !data.user) {
+          throw new Error('Recovery session is invalid or expired.');
+        }
+
+        form.hidden = false;
+        showMessage('Recovery verified. Set your new password.', true);
+      } catch (error) {
+        showMessage(error.message);
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const password =
+        document.getElementById('password').value;
+
+      const confirm =
+        document.getElementById('confirm').value;
+
+      if (
+        password.length < 8 ||
+        !/[A-Z]/.test(password) ||
+        !/\d/.test(password) ||
+        !/[^A-Za-z0-9]/.test(password)
+      ) {
+        showMessage(
+          'Use 8+ characters, an uppercase letter, a number, and a special character.'
+        );
+        return;
+      }
+
+      if (password !== confirm) {
+        showMessage('Passwords do not match.');
+        return;
+      }
+
+      button.disabled = true;
+      showMessage('Updating password...');
+
+      try {
+        const { error } = await supabase.auth.updateUser({
+          password
+        });
+
+        if (error) throw error;
+
+        await supabase.auth.signOut({ scope: 'local' });
+
+        form.hidden = true;
+        showMessage(
+          'Password updated! Return to the Freshcuts mobile app and sign in.',
+          true
+        );
+      } catch (error) {
+        showMessage(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    initializeRecovery();
+  </script>
+</body>
+</html>
